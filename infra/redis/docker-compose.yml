@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7
+    container_name: redis
+    # command: > // options to enable redis AOF persistence
+    #   redis-server
+    #   --appendonly yes
+    #   --appendfsync everysec
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - proxy
+
+volumes:
+  redis_data:
+
+networks:
+  proxy:
+    external: true

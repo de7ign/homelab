@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  youtrack:
+    image: jetbrains/youtrack:2026.1.12848
+    container_name: youtrack
+    ports:
+      - '8088:8080'
+    volumes:
+      - /home/work/home-lab/youtrack/data:/opt/youtrack/data
+      - /home/work/home-lab/youtrack/conf:/opt/youtrack/conf
+      - /home/work/home-lab/youtrack/logs:/opt/youtrack/logs
+      - /home/work/home-lab/youtrack/backups:/opt/youtrack/backups
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.youtrack.rule=Host(`youtrack.local`)"
+      - "traefik.http.routers.youtrack.service=youtrack"
+      - "traefik.http.services.youtrack.loadbalancer.server.port=8080"
+
+networks:
+  proxy:
+    external: true
