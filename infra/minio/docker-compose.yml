@@ -8,6 +8,7 @@ services:
     environment:
       MINIO_ROOT_USER: admin
       MINIO_ROOT_PASSWORD: YIlL2Xi9ahNz
+    restart: unless-stopped
     volumes:
       - minio_data:/data
     networks:
