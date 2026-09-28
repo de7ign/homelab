@@ -1,0 +1,21 @@
+# TODO: Setup sync server
+
+version: "3.9"
+
+services:
+  excalidraw:
+    image: excalidraw/excalidraw:latest
+    container_name: excalidraw
+    restart: unless-stopped
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.excalidraw.rule=Host(`excalidraw.local`)"
+      - "traefik.http.routers.excalidraw.service=excalidraw"
+      - "traefik.http.services.excalidraw.loadbalancer.server.port=80"
+
+networks:
+  proxy:
+    external: true
