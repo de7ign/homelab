@@ -59,7 +59,7 @@ mkcert -CAROOT
 
 ### Adding another host to the same certificate
 1. Rerun the same `mkcert -cert-file ... -key-file ...` command above with the new hostname appended to the argument list; mkcert reissues `traefik.pem`/`traefik-key.pem` with every hostname you list, so include the existing ones too. Traefik's file provider watches the certificate files and reloads automatically — no restart needed.
-2. In that service's `docker-compose.yml`, set its router's `entrypoints` label to `websecure` and add a `traefik.http.routers.<router>.tls=true` label, following the `itsaplan` and `itsaplan-api` routers in [apps/itsaplan/docker-compose.yml](apps/itsaplan/docker-compose.yml) as an example. Keep or add an HTTP-to-HTTPS redirect router if the service should no longer be reachable over plain HTTP.
+2. In that service's Compose config, set its router's `entrypoints` label to `websecure` and add a `traefik.http.routers.<router>.tls=true` label. Itsaplan keeps these Traefik-specific settings in [apps/itsaplan/docker-compose.traefik.yml](apps/itsaplan/docker-compose.traefik.yml), separate from the base stack. Keep or add an HTTP-to-HTTPS redirect router if the service should no longer be reachable over plain HTTP.
 
 The leaf certificate and key are ignored by Git and never leave WSL.
 
@@ -96,7 +96,7 @@ docker compose --env-file .env -f infra/traefik/docker-compose.yml up -d
 docker compose --env-file .env -f infra/postgres/docker-compose.yml up -d
 docker compose --env-file .env -f infra/rustfs/docker-compose.yml up -d
 docker compose --env-file .env -f infra/redis/docker-compose.yml up -d
-docker compose --env-file apps/itsaplan/.env -f apps/itsaplan/docker-compose.yml up -d
+docker compose --env-file apps/itsaplan/.env -f apps/itsaplan/docker-compose.yml -f apps/itsaplan/docker-compose.traefik.yml up -d
 ```
 
 Open Itsaplan at `https://itsaplan.local`.

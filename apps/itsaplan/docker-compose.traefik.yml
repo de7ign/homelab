@@ -1,0 +1,40 @@
+services:
+  api:
+    networks:
+      - default
+      - proxy
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "proxy"
+      traefik.http.routers.itsaplan-api.rule: "Host(`api.itsaplan.local`)"
+      traefik.http.routers.itsaplan-api.entrypoints: "websecure"
+      traefik.http.routers.itsaplan-api.tls: "true"
+      traefik.http.routers.itsaplan-api.service: "itsaplan-api"
+      traefik.http.services.itsaplan-api.loadbalancer.server.port: "3000"
+      traefik.http.routers.itsaplan-api-http.rule: "Host(`api.itsaplan.local`)"
+      traefik.http.routers.itsaplan-api-http.entrypoints: "web"
+      traefik.http.routers.itsaplan-api-http.middlewares: "itsaplan-https-redirect"
+      traefik.http.routers.itsaplan-api-http.service: "itsaplan-api"
+      traefik.http.middlewares.itsaplan-https-redirect.redirectscheme.scheme: "https"
+      traefik.http.middlewares.itsaplan-https-redirect.redirectscheme.permanent: "true"
+
+  web:
+    networks:
+      - default
+      - proxy
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "proxy"
+      traefik.http.routers.itsaplan.rule: "Host(`itsaplan.local`)"
+      traefik.http.routers.itsaplan.entrypoints: "websecure"
+      traefik.http.routers.itsaplan.tls: "true"
+      traefik.http.routers.itsaplan.service: "itsaplan"
+      traefik.http.services.itsaplan.loadbalancer.server.port: "3001"
+      traefik.http.routers.itsaplan-http.rule: "Host(`itsaplan.local`)"
+      traefik.http.routers.itsaplan-http.entrypoints: "web"
+      traefik.http.routers.itsaplan-http.middlewares: "itsaplan-https-redirect"
+      traefik.http.routers.itsaplan-http.service: "itsaplan"
+
+networks:
+  proxy:
+    external: true

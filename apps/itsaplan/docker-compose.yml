@@ -132,6 +132,11 @@ services:
       # Set COOKIE_DOMAIN only to override the parent domain derived from
       # APP_URL (multi-label TLDs, deep subdomains).
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+      # Where the client IP for the rate limit is read; empty reads X-Forwarded-For.
+      CLIENT_IP_HEADER: ${CLIENT_IP_HEADER:-}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      # Public origin for incoming Git webhooks when API_URL is private; empty uses API_URL.
+      GIT_WEBHOOK_BASE_URL: ${GIT_WEBHOOK_BASE_URL:-}
       S3_ENDPOINT: http://minio:9000
       S3_BUCKET: ${S3_BUCKET:-planner-attachments}
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
@@ -141,23 +146,11 @@ services:
       # Hosts trusted even though they resolve privately. Also governs webhook URL
       # validation and attachment import.
       SSRF_ALLOWED_HOSTS: ${SSRF_ALLOWED_HOSTS:-}
-    networks:
-      - default
-      - proxy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=proxy"
-      - "traefik.http.routers.itsaplan-api.rule=Host(`api.itsaplan.local`)"
-      - "traefik.http.routers.itsaplan-api.entrypoints=websecure"
-      - "traefik.http.routers.itsaplan-api.tls=true"
-      - "traefik.http.routers.itsaplan-api.service=itsaplan-api"
-      - "traefik.http.services.itsaplan-api.loadbalancer.server.port=3000"
-      - "traefik.http.routers.itsaplan-api-http.rule=Host(`api.itsaplan.local`)"
-      - "traefik.http.routers.itsaplan-api-http.entrypoints=web"
-      - "traefik.http.routers.itsaplan-api-http.middlewares=itsaplan-https-redirect"
-      - "traefik.http.routers.itsaplan-api-http.service=itsaplan-api"
-      - "traefik.http.middlewares.itsaplan-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.itsaplan-https-redirect.redirectscheme.permanent=true"
+      # Web Push. Push is off while any of the three is empty; `bun run web-push:keys`
+      # prints a key pair. The worker needs the same values.
+      WEB_PUSH_VAPID_PUBLIC_KEY: ${WEB_PUSH_VAPID_PUBLIC_KEY:-}
+      WEB_PUSH_VAPID_PRIVATE_KEY: ${WEB_PUSH_VAPID_PRIVATE_KEY:-}
+      WEB_PUSH_SUBJECT: ${WEB_PUSH_SUBJECT:-}
     healthcheck:
       test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3000/']
       interval: 15s
@@ -167,8 +160,9 @@ services:
     ports:
       - '${API_PORT:-3000}:3000'
 
-  # Webhook delivery, notification delivery, agent schedules, and agent runs.
-  # Shares the database with the api. No public ports.
+  # Webhook and notification delivery, source imports, and the agent schedules, whose
+  # runs it queues for the api to execute. Shares the database with the api. No public
+  # ports.
   worker:
     image: ghcr.io/croffasia/itsaplan-worker:${VERSION:-latest}
     build:
@@ -194,6 +188,10 @@ services:
       TELEMETRY_DEBUG: ${TELEMETRY_DEBUG:-}
       # The same list the api reads. This process delivers webhooks to those hosts.
       SSRF_ALLOWED_HOSTS: ${SSRF_ALLOWED_HOSTS:-}
+      # The same values the api reads. This process signs and sends the push messages.
+      WEB_PUSH_VAPID_PUBLIC_KEY: ${WEB_PUSH_VAPID_PUBLIC_KEY:-}
+      WEB_PUSH_VAPID_PRIVATE_KEY: ${WEB_PUSH_VAPID_PRIVATE_KEY:-}
+      WEB_PUSH_SUBJECT: ${WEB_PUSH_SUBJECT:-}
       # A downloaded Plane import attachment is stored here, the same bucket the
       # api's own uploads use.
       S3_ENDPOINT: http://minio:9000
@@ -202,7 +200,6 @@ services:
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-}
-      # Optional tuning lives in apps/worker/src/config.ts.
 
   # Telegram bot: long polling for the instance bot, completing the account links
   # users start from their profile. The bot token is stored in the database and
@@ -248,21 +245,6 @@ services:
       # Legal document URLs shown on the logged-out screens; empty hides the notice.
       PRIVACY_URL: ${PRIVACY_URL:-}
       TERMS_URL: ${TERMS_URL:-}
-    networks:
-      - default
-      - proxy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=proxy"
-      - "traefik.http.routers.itsaplan.rule=Host(`itsaplan.local`)"
-      - "traefik.http.routers.itsaplan.entrypoints=websecure"
-      - "traefik.http.routers.itsaplan.tls=true"
-      - "traefik.http.routers.itsaplan.service=itsaplan"
-      - "traefik.http.services.itsaplan.loadbalancer.server.port=3001"
-      - "traefik.http.routers.itsaplan-http.rule=Host(`itsaplan.local`)"
-      - "traefik.http.routers.itsaplan-http.entrypoints=web"
-      - "traefik.http.routers.itsaplan-http.middlewares=itsaplan-https-redirect"
-      - "traefik.http.routers.itsaplan-http.service=itsaplan"
     # /login renders without a session, and without reaching the api.
     healthcheck:
       test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3001/login']
@@ -277,7 +259,3 @@ volumes:
   postgres-data:
   minio-data:
   db-backups:
-
-networks:
-  proxy:
-    external: true
