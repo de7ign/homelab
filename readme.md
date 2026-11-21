@@ -104,3 +104,61 @@ Open Itsaplan at `https://itsaplan.local`.
 RustFS replaces ~~MinIO~~ in the active setup; the MinIO compose file is retained but is not started.
 
 Itsaplan replaces ~~Youtrack~~ in the active setup; the Youtrack compose file is retained but is not started.
+
+## Migrating the shared PostgreSQL service
+PostgreSQL major versions cannot use each other's data directories directly. For a major-version upgrade, use a dump and restore as below, or use `pg_upgrade`. These instructions apply to the shared service in [infra/postgres/docker-compose.yml](infra/postgres/docker-compose.yml), not Itsaplan's separate PostgreSQL service and volume.
+
+Run the commands from the repository root. Stop clients before dumping and keep them stopped until the restored data is verified. The source server must still be running, and the target must use a **new, empty volume**. Keep the original Compose configuration and volume for rollback; do not run `docker compose down -v`.
+
+The dump includes databases, roles and data, including password hashes; protect it like a secret. It does not include server configuration or extension binaries. Check target-version compatibility, install any required extensions, and account for custom tablespaces and locale/collation requirements before restoring. This procedure is for upgrades, not downgrades.
+
+Stop if any command fails. A failed restore can leave partial data in the target volume; investigate before retrying. Do not replace the original volume or discard the dump until the restore has been verified.
+
+### 1. Dump the source cluster
+The temporary bootstrap role and database name `homelab_pg_migrate` must not already exist in the source cluster. Check roles and databases with `\du` and `\l` in `psql`; if either name exists, choose another unique name and replace it consistently in the commands below.
+
+Create a private backup directory and dump the cluster. `BACKUP_DIR` must remain set in the same shell for the restore step. Check that `pg_dumpall` succeeds before proceeding; a nonempty file alone does not prove a successful dump.
+
+```sh
+umask 077
+BACKUP_DIR=$(mktemp -d "$HOME/postgres-migration.XXXXXXXX")
+echo "Backup directory: $BACKUP_DIR"
+docker exec postgres sh -c 'pg_dumpall -U "$POSTGRES_USER"' > "$BACKUP_DIR/all.sql"
+test -s "$BACKUP_DIR/all.sql"
+```
+
+### 2. Start the new version
+Stop the source server:
+
+```sh
+docker compose --env-file .env -f infra/postgres/docker-compose.yml stop postgres
+```
+
+Update the Compose file to use the target image and a new volume name, leaving the old volume unattached. Ensure the target volume name does not already refer to an existing volume. Follow the target image's documentation for the correct mount path; for the official PostgreSQL 18 image, mount the new volume at `/var/lib/postgresql`, not the old `/var/lib/postgresql/data` path. Never attach the old data volume to the new server.
+
+Start the target with a temporary bootstrap superuser, which avoids conflicting with roles restored from the dump:
+
+```sh
+POSTGRES_USER=homelab_pg_migrate docker compose --env-file .env -f infra/postgres/docker-compose.yml up -d postgres
+docker exec postgres pg_isready -h 127.0.0.1 -U homelab_pg_migrate -d postgres
+```
+
+If `pg_isready` reports that the server is not ready, wait and retry; inspect `docker logs postgres` if it does not become ready.
+
+### 3. Restore and verify
+Restore the dump into the new server:
+
+```sh
+docker exec -i postgres sh -c 'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres' \
+  < "$BACKUP_DIR/all.sql"
+```
+
+Recreate the container using the regular `POSTGRES_USER` from `.env`, wait for it to be ready, then remove the temporary database and disable the temporary bootstrap role:
+
+```sh
+docker compose --env-file .env -f infra/postgres/docker-compose.yml up -d --force-recreate postgres
+docker exec postgres pg_isready -h 127.0.0.1
+docker exec postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres -c "DROP DATABASE IF EXISTS homelab_pg_migrate" -c "ALTER ROLE homelab_pg_migrate NOLOGIN PASSWORD NULL"'
+```
+
+The bootstrap role cannot be dropped because PostgreSQL requires it internally; it remains a superuser with login disabled and no password. Verify the restored databases and application data before restarting clients. Retain the dump and original volume until satisfied; to roll back before accepting new writes, stop the target and restore the original Compose configuration and volume.
