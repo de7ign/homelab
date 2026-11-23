@@ -31,6 +31,7 @@ Add your domains
 127.0.0.1   rustfs-console.local
 127.0.0.1   itsaplan.local
 127.0.0.1   api.itsaplan.local
+127.0.0.1   dbpro.local
 ```
 
 Retired storage domains: ~~minio.local~~ and ~~minio-console.local~~.
@@ -38,7 +39,7 @@ Retired storage domains: ~~minio.local~~ and ~~minio-console.local~~.
 Retired project tracker domain: ~~youtrack.local~~.
 
 ## Local HTTPS behind Traefik
-Itsaplan uses secure session cookies, so it needs HTTPS. Traefik serves one certificate on its `websecure` entrypoint, generated in WSL with [mkcert](https://github.com/FiloSottile/mkcert). The certificate only covers the hostnames listed on its SAN list, currently `itsaplan.local` and `api.itsaplan.local` — the only two routed through `websecure`/`tls=true` today.
+Itsaplan and DB Pro use secure session cookies, so they need HTTPS. Traefik serves one certificate on its `websecure` entrypoint, generated in WSL with [mkcert](https://github.com/FiloSottile/mkcert). The certificate must include all HTTPS hostnames, including `dbpro.local`; reissue an existing certificate if it does not.
 
 Install mkcert in WSL first — it is not a Windows package and running it from PowerShell without this step fails:
 
@@ -51,7 +52,7 @@ Then, in WSL, from the repository root:
 ```sh
 mkcert -install
 mkdir -p infra/traefik/certs
-mkcert -cert-file infra/traefik/certs/traefik.pem -key-file infra/traefik/certs/traefik-key.pem itsaplan.local api.itsaplan.local
+mkcert -cert-file infra/traefik/certs/traefik.pem -key-file infra/traefik/certs/traefik-key.pem itsaplan.local api.itsaplan.local dbpro.local
 mkcert -CAROOT
 ```
 
@@ -97,9 +98,12 @@ docker compose --env-file .env -f infra/postgres/docker-compose.yml up -d
 docker compose --env-file .env -f infra/rustfs/docker-compose.yml up -d
 docker compose --env-file .env -f infra/redis/docker-compose.yml up -d
 docker compose --env-file apps/itsaplan/.env -f apps/itsaplan/docker-compose.yml -f apps/itsaplan/docker-compose.traefik.yml up -d
+docker compose -f apps/dbpro/docker-compose.yml up -d
 ```
 
 Open Itsaplan at `https://itsaplan.local`.
+
+Open DB Pro at `https://dbpro.local` and create the admin account on first visit. Restrict access until that account is created. DB Pro's `/data` volume contains its SQLite database and generated encryption key; back up both together, since losing the key makes saved connection credentials unreadable. The shared PostgreSQL and Redis services are reachable from DB Pro as `postgres:5432` and `redis:6379` on the `proxy` network. Itsaplan's separate database is not on that network.
 
 RustFS replaces ~~MinIO~~ in the active setup; the MinIO compose file is retained but is not started.
 

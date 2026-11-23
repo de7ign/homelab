@@ -1,0 +1,30 @@
+services:
+  dbpro:
+    image: ghcr.io/dbprohq/dbpro-studio:2.6.0
+    container_name: dbpro
+    restart: unless-stopped
+    volumes:
+      - dbpro-data:/data
+    networks:
+      - proxy
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "proxy"
+      traefik.http.routers.dbpro.rule: "Host(`dbpro.local`)"
+      traefik.http.routers.dbpro.entrypoints: "websecure"
+      traefik.http.routers.dbpro.tls: "true"
+      traefik.http.routers.dbpro.service: "dbpro"
+      traefik.http.services.dbpro.loadbalancer.server.port: "3100"
+      traefik.http.routers.dbpro-http.rule: "Host(`dbpro.local`)"
+      traefik.http.routers.dbpro-http.entrypoints: "web"
+      traefik.http.routers.dbpro-http.middlewares: "dbpro-https-redirect"
+      traefik.http.routers.dbpro-http.service: "dbpro"
+      traefik.http.middlewares.dbpro-https-redirect.redirectscheme.scheme: "https"
+      traefik.http.middlewares.dbpro-https-redirect.redirectscheme.permanent: "true"
+
+volumes:
+  dbpro-data:
+
+networks:
+  proxy:
+    external: true
